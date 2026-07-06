@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Running Log</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --paper:#FBFAF7; --grid:#E4E9EF; --grid-strong:#D3DAE3;
+    --ink:#23282E; --sub:#7A828C; --accent:#2E5E8C; --accent-soft:#E9F0F7;
+    --line:#E0E2E1; --danger:#B0453A;
+    --sans: system-ui, -apple-system, "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Noto Sans JP", sans-serif;
+    --mincho: "Hiragino Mincho ProN", "Yu Mincho", "YuMincho", "Noto Serif JP", serif;
+    --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; height:100%;}
+  body{font-family:var(--sans); color:var(--ink); background:var(--paper); line-height:1.6; -webkit-font-smoothing:antialiased;}
+  #app{max-width:720px; margin:0 auto; min-height:100%; display:flex; flex-direction:column;}
+
+  .topbar{position:sticky; top:0; z-index:20; display:flex; align-items:center; gap:10px;
+    padding:14px 16px 12px; background:rgba(251,250,247,.92); backdrop-filter:saturate(1.1) blur(6px); border-bottom:1px solid var(--line);}
+  .topbar .title{font-weight:600; letter-spacing:.02em;}
+  .topbar .date-h{font-family:var(--mincho); font-size:20px; font-weight:600;}
+  .topbar .spacer{flex:1;}
+  .iconbtn{appearance:none; border:1px solid var(--line); background:#fff; color:var(--ink); font:inherit; font-size:13px;
+    padding:7px 12px; border-radius:999px; cursor:pointer; display:inline-flex; align-items:center; gap:6px; transition:background .15s,border-color .15s;}
+  .iconbtn:hover{background:var(--accent-soft); border-color:var(--accent);}
+  .iconbtn:focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
+  .iconbtn.plain{border-color:transparent; background:transparent; padding-left:4px;}
+  .iconbtn.plain:hover{background:var(--accent-soft);}
+
+  .cal-wrap{padding:18px 16px 40px;}
+  .cal-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;}
+  .cal-title{font-family:var(--mincho); font-size:22px; font-weight:600;}
+  .cal-nav{display:flex; gap:6px;}
+  .cal-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:2px;}
+  .cal-dow{text-align:center; font-size:11px; color:var(--sub); padding:6px 0 8px; font-weight:600; letter-spacing:.04em;}
+  .cal-dow.sun{color:#B0453A;} .cal-dow.sat{color:#3f6fa0;}
+  .cal-cell{position:relative; aspect-ratio:1/1; border:1px solid transparent; border-radius:10px; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; cursor:pointer; color:var(--ink); font-size:15px; transition:background .12s;
+    background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+    background-size:9px 9px; background-position:center;}
+  .cal-cell.empty{background:none; cursor:default;}
+  .cal-cell:not(.empty):hover{background-color:var(--accent-soft);}
+  .cal-cell .num{position:relative; z-index:1; font-variant-numeric:tabular-nums;}
+  .cal-cell.today{border-color:var(--accent);}
+  .cal-cell.today .num{color:var(--accent); font-weight:700;}
+  .cal-cell.sun .num{color:#B0453A;} .cal-cell.sat .num{color:#3f6fa0;}
+  .cal-cell .dot{position:absolute; bottom:9px; z-index:1; width:5px; height:5px; border-radius:50%; background:var(--accent);}
+
+  .day-wrap{flex:1; padding:8px 0 120px;}
+  .day-sub{padding:2px 18px 10px; color:var(--sub); font-size:12px; font-family:var(--mono);}
+  .log{background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+    background-size:22px 22px; border-top:1px solid var(--line); border-bottom:1px solid var(--line);}
+  .entry{display:flex; border-bottom:1px dashed var(--grid-strong);
+    background:linear-gradient(90deg, rgba(255,255,255,0) 0, rgba(255,255,255,.55) 62px, rgba(255,255,255,.75) 100%);}
+  .entry:last-child{border-bottom:none;}
+  .entry .tcol{flex:0 0 62px; padding:12px 6px 12px 14px; border-right:1.5px solid #EBB9B0;}
+  .entry .tinput{width:100%; border:none; background:transparent; color:var(--accent); font-family:var(--mono); font-size:14px; font-weight:600; padding:2px 0; letter-spacing:-.02em;}
+  .entry .tinput:focus{outline:none; background:var(--accent-soft); border-radius:4px;}
+  .entry .ccol{flex:1; min-width:0; padding:8px 12px 12px 12px;}
+  .entry textarea{width:100%; border:none; background:transparent; resize:none; overflow:hidden; font-family:var(--sans); font-size:15px; color:var(--ink); line-height:1.7; padding:4px 0;}
+  .entry textarea:focus{outline:none;}
+  .entry textarea::placeholder{color:#B7BEC6;}
+  .photos{display:flex; flex-wrap:wrap; gap:8px; margin-top:6px;}
+  .photos .ph{position:relative; width:96px; height:96px; border-radius:8px; overflow:hidden; border:1px solid var(--line); background:#f0f0ee;}
+  .photos .ph img{width:100%; height:100%; object-fit:cover; display:block; cursor:zoom-in;}
+  .photos .ph .rm{position:absolute; top:3px; right:3px; width:20px; height:20px; border-radius:50%; background:rgba(0,0,0,.55); color:#fff; border:none; font-size:13px; line-height:20px; cursor:pointer; display:flex; align-items:center; justify-content:center;}
+  .entry-tools{display:flex; gap:14px; margin-top:8px;}
+  .tlink{background:none; border:none; color:var(--sub); font:inherit; font-size:12px; cursor:pointer; padding:2px 0; display:inline-flex; align-items:center; gap:4px;}
+  .tlink:hover{color:var(--accent);}
+  .tlink.del:hover{color:var(--danger);}
+  .empty-state{padding:52px 24px; text-align:center; color:var(--sub);}
+  .empty-state .big{font-family:var(--mincho); font-size:17px; color:var(--ink); margin-bottom:6px;}
+
+  .addbar{position:fixed; left:0; right:0; bottom:0; z-index:30; display:flex; justify-content:center;
+    padding:14px 16px calc(16px + env(safe-area-inset-bottom)); background:linear-gradient(transparent, var(--paper) 34%); pointer-events:none;}
+  .addbar .inner{max-width:720px; width:100%; display:flex; justify-content:flex-end; pointer-events:auto;}
+  .addbtn{appearance:none; border:none; cursor:pointer; font:inherit; font-weight:600; font-size:15px; background:var(--accent); color:#fff;
+    padding:14px 24px; border-radius:999px; box-shadow:0 6px 18px rgba(46,94,140,.28); display:inline-flex; align-items:center; gap:8px; transition:transform .12s;}
+  .addbtn:active{transform:translateY(1px);}
+
+  .lightbox{position:fixed; inset:0; z-index:100; background:rgba(20,22,24,.92); display:none; align-items:center; justify-content:center; padding:20px; cursor:zoom-out;}
+  .lightbox.on{display:flex;}
+  .lightbox img{max-width:100%; max-height:100%; border-radius:6px;}
+
+  .modal-ov{position:fixed; inset:0; z-index:120; background:rgba(20,22,24,.42); display:flex; align-items:center; justify-content:center; padding:24px;}
+  .modal{background:#fff; border-radius:14px; max-width:330px; width:100%; padding:20px 20px 16px; box-shadow:0 14px 44px rgba(0,0,0,.28);}
+  .modal-msg{font-size:15px; line-height:1.6; margin-bottom:18px;}
+  .modal-btns{display:flex; gap:10px; justify-content:flex-end;}
+  .mbtn{appearance:none; border:1px solid var(--line); background:#fff; color:var(--ink); font:inherit; font-size:14px; padding:9px 18px; border-radius:999px; cursor:pointer;}
+  .mbtn.ok{background:var(--accent); color:#fff; border-color:var(--accent);}
+  .mbtn.ok.danger{background:var(--danger); border-color:var(--danger);}
+
+  .toast{position:fixed; left:50%; bottom:100px; z-index:130; transform:translateX(-50%) translateY(10px);
+    background:#23282E; color:#fff; font-size:13px; padding:10px 16px; border-radius:999px; max-width:82%; text-align:center; opacity:0; pointer-events:none; transition:opacity .2s, transform .2s;}
+  .toast.on{opacity:1; transform:translateX(-50%) translateY(0);}
+
+  /* auth / setup */
+  .auth-wrap{max-width:360px; margin:0 auto; padding:56px 24px;}
+  .auth-wrap h1{font-family:var(--mincho); font-size:24px; margin:0 0 6px;}
+  .auth-wrap p.lead{color:var(--sub); font-size:13px; margin:0 0 24px;}
+  .field{margin-bottom:14px;}
+  .field label{display:block; font-size:12px; color:var(--sub); margin-bottom:6px;}
+  .field input{width:100%; padding:12px 14px; border:1px solid var(--line); border-radius:10px; font:inherit; font-size:16px; background:#fff;}
+  .field input:focus{outline:none; border-color:var(--accent);}
+  .auth-btn{width:100%; padding:13px; border:none; border-radius:999px; background:var(--accent); color:#fff; font:inherit; font-size:15px; font-weight:600; cursor:pointer; margin-top:6px;}
+  .auth-btn[disabled]{opacity:.55; cursor:default;}
+  .auth-toggle{margin-top:16px; text-align:center; font-size:13px; color:var(--sub);}
+  .auth-toggle button{background:none; border:none; color:var(--accent); font:inherit; cursor:pointer; text-decoration:underline;}
+  .auth-msg{margin-top:14px; font-size:13px; min-height:18px; text-align:center; color:var(--danger);}
+  .auth-msg.ok{color:var(--accent);}
+  .setup{max-width:540px; margin:0 auto; padding:48px 24px; font-size:14px; line-height:1.75;}
+  .setup h1{font-family:var(--mincho); font-size:22px;}
+  .setup code{background:#EEF1F4; padding:1px 6px; border-radius:4px; font-family:var(--mono); font-size:12.5px; word-break:break-all;}
+
+  @media (prefers-reduced-motion: reduce){*{transition:none !important;}}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="topbar" id="topbar" style="display:none"></div>
+  <div id="main"></div>
+</div>
+
+<div class="lightbox" id="lightbox"><img id="lightbox-img" alt=""></div>
+
+<script>
+"use strict";
+/* ==========================================================================
+   ↓↓↓ ここにSupabaseの値を貼る（2箇所だけ）↓↓↓
+   ========================================================================== */
+const SUPABASE_URL      = "https://YOUR-PROJECT-ref.supabase.co";
+const SUPABASE_ANON_KEY = "YOUR-ANON-KEY";
+/* ==========================================================================
+   ↑↑↑ 貼り替えるのはこの2行だけ ↑↑↑
+   ========================================================================== */
+
+const DOW = ["日","月","火","水","木","金","土"];
+const elTop = document.getElementById("topbar");
+const elMain = document.getElementById("main");
+
+const configured = !SUPABASE_URL.includes("YOUR-PROJECT") && !SUPABASE_ANON_KEY.includes("YOUR-ANON");
+let sb = null;
+if(configured){ sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); }
+
+const state = { view:"login", month:startOfMonth(new Date()), day:null, dayData:null, entryDays:new Set(), session:null };
+
+/* ---------- utils ---------- */
+function startOfMonth(d){ return new Date(d.getFullYear(), d.getMonth(), 1); }
+function pad(n){ return String(n).padStart(2,"0"); }
+function ymd(d){ return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
+function todayStr(){ return ymd(new Date()); }
+function nowHM(){ const d=new Date(); return pad(d.getHours())+":"+pad(d.getMinutes()); }
+function parseYMD(s){ const [y,m,dd]=s.split("-").map(Number); return new Date(y,m-1,dd); }
+function uid(){ return (crypto.randomUUID?crypto.randomUUID():Date.now()+"-"+Math.random().toString(16).slice(2)); }
+function esc(s){ return (s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+/* ---------- toast / confirm ---------- */
+let toastTimer=null;
+function toast(msg){
+  let t=document.getElementById("toast");
+  if(!t){ t=document.createElement("div"); t.id="toast"; t.className="toast"; document.body.appendChild(t); }
+  t.textContent=msg; t.classList.add("on");
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove("on"), 2400);
+}
+function confirmDialog(message, okLabel="削除", danger=true){
+  return new Promise(resolve=>{
+    const ov=document.createElement("div"); ov.className="modal-ov";
+    ov.innerHTML=`<div class="modal" role="dialog" aria-modal="true"><div class="modal-msg"></div>
+      <div class="modal-btns"><button class="mbtn cancel">やめる</button><button class="mbtn ok ${danger?'danger':''}"></button></div></div>`;
+    ov.querySelector(".modal-msg").textContent=message;
+    ov.querySelector(".ok").textContent=okLabel;
+    const close=v=>{ ov.remove(); resolve(v); };
+    ov.querySelector(".cancel").onclick=()=>close(false);
+    ov.querySelector(".ok").onclick=()=>close(true);
+    ov.onclick=e=>{ if(e.target===ov) close(false); };
+    document.body.appendChild(ov); ov.querySelector(".ok").focus();
+  });
+}
+
+/* ---------- image compression ---------- */
+function compressImage(file, maxDim=1200, quality=0.72){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onerror=()=>reject(new Error("read"));
+    reader.onload=()=>{
+      const img=new Image();
+      img.onerror=()=>reject(new Error("decode"));
+      img.onload=()=>{
+        let w=img.width, h=img.height;
+        const scale=Math.min(1, maxDim/Math.max(w,h));
+        w=Math.round(w*scale); h=Math.round(h*scale);
+        const c=document.createElement("canvas"); c.width=w; c.height=h;
+        c.getContext("2d").drawImage(img,0,0,w,h);
+        let q=quality, out=c.toDataURL("image/jpeg",q);
+        while(out.length>1.4*1024*1024 && q>0.4){ q-=0.12; out=c.toDataURL("image/jpeg",q); }
+        resolve(out);
+      };
+      img.src=reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+/* ==========================================================================
+   DATA LAYER (Supabase)
+   ========================================================================== */
+function rowToEntry(r){ return {id:r.id, time:r.entry_time||"", text:r.body||"", photos:Array.isArray(r.photos)?r.photos:[], seq:r.seq||0}; }
+
+async function fetchDay(s){
+  const {data,error}=await sb.from("journal").select("*").eq("entry_date",s).order("entry_time",{ascending:true}).order("seq",{ascending:true});
+  if(error){ toast("読み込みに失敗: "+error.message); return {entries:[]}; }
+  return {entries:(data||[]).map(rowToEntry)};
+}
+async function fetchDaysInMonth(monthDate){
+  const y=monthDate.getFullYear(), m=monthDate.getMonth();
+  const start=y+"-"+pad(m+1)+"-01";
+  const last=new Date(y,m+1,0);
+  const end=y+"-"+pad(m+1)+"-"+pad(last.getDate());
+  const {data,error}=await sb.from("journal").select("entry_date").gte("entry_date",start).lte("entry_date",end);
+  if(error){ toast("読み込みに失敗"); return new Set(); }
+  return new Set((data||[]).map(r=>r.entry_date));
+}
+async function insertEntry(s,e){
+  const {error}=await sb.from("journal").insert({ id:e.id, entry_date:s, entry_time:e.time, body:e.text, photos:e.photos, seq:e.seq });
+  if(error){ toast("保存に失敗: "+error.message); return false; }
+  return true;
+}
+async function updateEntry(e){
+  const {error}=await sb.from("journal").update({ entry_time:e.time, body:e.text, photos:e.photos }).eq("id",e.id);
+  if(error){ toast("保存に失敗: "+error.message); return false; }
+  return true;
+}
+async function deleteRow(id){
+  const {error}=await sb.from("journal").delete().eq("id",id);
+  if(error){ toast("削除に失敗: "+error.message); return false; }
+  return true;
+}
+
+/* ==========================================================================
+   AUTH
+   ========================================================================== */
+function renderSetup(){
+  elTop.style.display="none";
+  elMain.innerHTML=`<div class="setup">
+    <h1>設定がまだ</h1>
+    <p>このファイルの先頭にある <code>SUPABASE_URL</code> と <code>SUPABASE_ANON_KEY</code> を、あなたのプロジェクトの値に置き換えて保存してから開き直して。</p>
+    <p>値は Supabase の <code>Project Settings → API</code> にある <code>Project URL</code> と <code>anon public</code> キー。</p>
+  </div>`;
+}
+
+function renderLogin(mode){
+  state.view="login"; mode=mode||"login";
+  elTop.style.display="none";
+  const isSignup = mode==="signup";
+  elMain.innerHTML=`<div class="auth-wrap">
+    <h1>Running Log</h1>
+    <p class="lead">${isSignup?"最初に一度だけアカウントを作る。":"ログインすると、どの端末でも同じ中身が出る。"}</p>
+    <div class="field"><label>メールアドレス</label><input id="email" type="email" autocomplete="username" inputmode="email"></div>
+    <div class="field"><label>パスワード</label><input id="pw" type="password" autocomplete="${isSignup?'new-password':'current-password'}"></div>
+    <button class="auth-btn" id="go">${isSignup?"アカウントを作る":"ログイン"}</button>
+    <div class="auth-msg" id="amsg"></div>
+    <div class="auth-toggle">
+      ${isSignup?"すでにアカウントがある？":"はじめて？"}
+      <button id="toggle">${isSignup?"ログイン":"アカウント作成"}</button>
+    </div>
+  </div>`;
+  const msg=elMain.querySelector("#amsg");
+  const btn=elMain.querySelector("#go");
+  elMain.querySelector("#toggle").onclick=()=>renderLogin(isSignup?"login":"signup");
+  btn.onclick=async ()=>{
+    const email=elMain.querySelector("#email").value.trim();
+    const pw=elMain.querySelector("#pw").value;
+    if(!email||!pw){ msg.className="auth-msg"; msg.textContent="メールとパスワードを入れて。"; return; }
+    btn.disabled=true; msg.className="auth-msg"; msg.textContent="…";
+    try{
+      if(isSignup){
+        const {data,error}=await sb.auth.signUp({email,password:pw});
+        if(error) throw error;
+        if(data.session){ /* onAuthStateChange が拾う */ }
+        else{ msg.className="auth-msg ok"; msg.textContent="確認メールを送った。メール内のリンクを踏んでから、ログインして。"; }
+      }else{
+        const {error}=await sb.auth.signInWithPassword({email,password:pw});
+        if(error) throw error;
+      }
+    }catch(err){
+      msg.className="auth-msg"; msg.textContent=translateAuthError(err.message||String(err));
+    }finally{ btn.disabled=false; }
+  };
+}
+function translateAuthError(m){
+  if(/Invalid login/i.test(m)) return "メールかパスワードが違う。";
+  if(/already registered/i.test(m)) return "そのメールは登録済み。ログインして。";
+  if(/at least 6/i.test(m)) return "パスワードは6文字以上。";
+  if(/Email not confirmed/i.test(m)) return "メール確認が未完了。確認リンクを踏んで。";
+  return m;
+}
+
+/* ==========================================================================
+   CALENDAR
+   ========================================================================== */
+async function showCalendar(){
+  state.view="calendar";
+  elTop.style.display="";
+  state.entryDays=await fetchDaysInMonth(state.month);
+  renderCalendar();
+}
+function renderCalendar(){
+  const y=state.month.getFullYear(), m=state.month.getMonth();
+  elTop.innerHTML=`<span class="title">Running Log</span><span class="spacer"></span>
+    <button class="iconbtn" id="btn-today">今日</button>
+    <button class="iconbtn plain" id="btn-out">ログアウト</button>`;
+  elTop.querySelector("#btn-today").onclick=()=>openDay(todayStr());
+  elTop.querySelector("#btn-out").onclick=async ()=>{ await sb.auth.signOut(); };
+
+  const startPad=new Date(y,m,1).getDay();
+  const daysIn=new Date(y,m+1,0).getDate();
+  let cells="";
+  for(let i=0;i<startPad;i++) cells+=`<div class="cal-cell empty"></div>`;
+  for(let d=1; d<=daysIn; d++){
+    const ds=y+"-"+pad(m+1)+"-"+pad(d);
+    const dow=new Date(y,m,d).getDay();
+    const cls=["cal-cell"];
+    if(ds===todayStr()) cls.push("today");
+    if(dow===0) cls.push("sun"); if(dow===6) cls.push("sat");
+    cells+=`<div class="${cls.join(" ")}" data-d="${ds}"><span class="num">${d}</span>${state.entryDays.has(ds)?'<span class="dot"></span>':''}</div>`;
+  }
+  elMain.innerHTML=`<div class="cal-wrap">
+    <div class="cal-head"><div class="cal-title">${y}年 ${m+1}月</div>
+      <div class="cal-nav"><button class="iconbtn" id="prev">‹</button><button class="iconbtn" id="next">›</button></div></div>
+    <div class="cal-grid">
+      ${DOW.map((w,i)=>`<div class="cal-dow ${i===0?'sun':''} ${i===6?'sat':''}">${w}</div>`).join("")}
+      ${cells}
+    </div></div>`;
+  elMain.querySelector("#prev").onclick=()=>{ state.month=new Date(y,m-1,1); showCalendar(); };
+  elMain.querySelector("#next").onclick=()=>{ state.month=new Date(y,m+1,1); showCalendar(); };
+  elMain.querySelectorAll(".cal-cell[data-d]").forEach(c=>{ c.onclick=()=>openDay(c.getAttribute("data-d")); });
+}
+
+/* ==========================================================================
+   DAY VIEW
+   ========================================================================== */
+async function openDay(s){
+  state.day=s; state.month=startOfMonth(parseYMD(s));
+  elTop.style.display="";
+  state.dayData=await fetchDay(s);
+  renderDay();
+}
+function dateHeader(s){ const d=parseYMD(s); return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日(${DOW[d.getDay()]})`; }
+function sortEntries(a,b){ if(a.time!==b.time) return (a.time||"").localeCompare(b.time||""); return (a.seq||0)-(b.seq||0); }
+
+function renderDay(){
+  state.view="day";
+  elTop.innerHTML=`<button class="iconbtn plain" id="back">‹ カレンダー</button><span class="spacer"></span>
+    <span class="date-h">${dateHeader(state.day)}</span><span class="spacer"></span>
+    <button class="iconbtn" id="copy">コピー</button>`;
+  elTop.querySelector("#back").onclick=()=>showCalendar();
+  elTop.querySelector("#copy").onclick=copyDay;
+
+  const entries=state.dayData.entries.slice().sort(sortEntries);
+  let body;
+  if(entries.length===0){
+    body=`<div class="empty-state"><div class="big">まだ記入がない</div><div>下の「記入」から始める。時刻は自動で入る。</div></div>`;
+  }else{
+    body=`<div class="log">${entries.map(renderEntry).join("")}</div>`;
+  }
+  elMain.innerHTML=`<div class="day-wrap"><div class="day-sub">${state.day} · ${entries.length}件</div>${body}</div>
+    <div class="addbar"><div class="inner"><button class="addbtn" id="add">＋ 記入</button></div></div>`;
+  elMain.querySelector("#add").onclick=addEntry;
+  bindEntries(); autosizeAll();
+}
+function renderEntry(e){
+  return `<div class="entry" data-id="${e.id}">
+    <div class="tcol"><input class="tinput" type="time" value="${esc(e.time)}" step="60" aria-label="時刻"></div>
+    <div class="ccol">
+      <textarea placeholder="内容を記入…" rows="1">${esc(e.text)}</textarea>
+      <div class="photos">${(e.photos||[]).map((src,idx)=>`
+        <div class="ph"><img alt="添付" src="${src}" data-idx="${idx}"><button class="rm" data-rm="${idx}" aria-label="写真を削除">×</button></div>`).join("")}</div>
+      <div class="entry-tools"><button class="tlink add-photo">＋ 写真</button><button class="tlink del">削除</button></div>
+    </div></div>`;
+}
+function findEntry(id){ return state.dayData.entries.find(x=>x.id===id); }
+
+function bindEntries(){
+  elMain.querySelectorAll(".entry").forEach(row=>{
+    const id=row.getAttribute("data-id"); const e=findEntry(id); if(!e) return;
+    const ta=row.querySelector("textarea");
+    ta.addEventListener("input",()=>autosize(ta));
+    ta.addEventListener("blur",async ()=>{ if(e.text!==ta.value){ e.text=ta.value; await updateEntry(e); } });
+    const ti=row.querySelector(".tinput");
+    ti.addEventListener("change",async ()=>{ e.time=ti.value||e.time; await updateEntry(e); });
+    row.querySelector(".add-photo").onclick=()=>pickPhotos(e);
+    row.querySelector(".del").onclick=()=>deleteEntry(e);
+    row.querySelectorAll("[data-rm]").forEach(btn=>{ btn.onclick=ev=>{ ev.stopPropagation(); removePhoto(e, +btn.getAttribute("data-rm")); }; });
+    row.querySelectorAll("img[data-idx]").forEach(img=>{ img.onclick=()=>{ if(img.src) openLightbox(img.src); }; });
+  });
+}
+function autosize(ta){ ta.style.height="auto"; ta.style.height=ta.scrollHeight+"px"; }
+function autosizeAll(){ elMain.querySelectorAll("textarea").forEach(autosize); }
+
+async function addEntry(){
+  const e={ id:uid(), time:nowHM(), text:"", photos:[], seq:Date.now() };
+  const ok=await insertEntry(state.day,e);
+  if(!ok) return;
+  state.dayData.entries.push(e);
+  renderDay();
+  const t=elMain.querySelector(`.entry[data-id="${e.id}"] textarea`); if(t) t.focus();
+}
+async function deleteEntry(e){
+  const ok=await confirmDialog("この記入を削除する？　元に戻せない。","削除する");
+  if(!ok) return;
+  if(!await deleteRow(e.id)) return;
+  state.dayData.entries=state.dayData.entries.filter(x=>x.id!==e.id);
+  renderDay();
+}
+function pickPhotos(e){
+  const inp=document.createElement("input"); inp.type="file"; inp.accept="image/*"; inp.multiple=true;
+  inp.onchange=async ()=>{
+    for(const f of [...inp.files]){
+      try{ const data=await compressImage(f); e.photos=e.photos||[]; e.photos.push(data); }
+      catch(err){ toast("画像を読み込めなかった"); }
+    }
+    if(await updateEntry(e)) renderDay();
+  };
+  inp.click();
+}
+async function removePhoto(e, idx){
+  e.photos=(e.photos||[]).filter((_,i)=>i!==idx);
+  if(await updateEntry(e)) renderDay();
+}
+
+/* ---------- lightbox ---------- */
+const lb=document.getElementById("lightbox"), lbImg=document.getElementById("lightbox-img");
+function openLightbox(src){ lbImg.src=src; lb.classList.add("on"); }
+lb.onclick=()=>{ lb.classList.remove("on"); lbImg.src=""; };
+
+/* ---------- copy day ---------- */
+async function copyDay(){
+  const entries=state.dayData.entries.slice().sort(sortEntries);
+  const lines=[dateHeader(state.day),""];
+  for(const e of entries){ const ph=(e.photos&&e.photos.length)?`  [写真${e.photos.length}]`:""; lines.push(`${e.time}\t${(e.text||"").replace(/\n/g,"\n\t")}${ph}`); }
+  const text=lines.join("\n");
+  try{ await navigator.clipboard.writeText(text); flashCopy("コピーした"); }
+  catch(_){ const ta=document.createElement("textarea"); ta.value=text; document.body.appendChild(ta); ta.select();
+    try{ document.execCommand("copy"); flashCopy("コピーした"); }catch(__){ toast("コピーできなかった"); } ta.remove(); }
+}
+function flashCopy(msg){ const b=elTop.querySelector("#copy"); if(!b) return; const old=b.textContent; b.textContent=msg; setTimeout(()=>{ b.textContent=old; },1200); }
+
+/* ==========================================================================
+   ROUTER / INIT
+   ========================================================================== */
+function route(){
+  if(state.session){ if(state.view==="login"||state.view==="") showCalendar(); }
+  else{ renderLogin("login"); }
+}
+(async function init(){
+  if(!configured){ renderSetup(); return; }
+  const {data:{session}}=await sb.auth.getSession();
+  state.session=session;
+  sb.auth.onAuthStateChange((_ev, s)=>{ const was=!!state.session; state.session=s; if(!!s!==was) route(); });
+  route();
+})();
+</script>
+</body>
+</html>
