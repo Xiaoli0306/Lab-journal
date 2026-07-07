@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Running Lab note</title>
+<title>Lab note</title>
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/png" href="favicon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -72,7 +72,11 @@
   .photos .ph{position:relative; width:96px; height:96px; border-radius:8px; overflow:hidden; border:1px solid var(--line); background:#f0f0ee;}
   .photos .ph img{width:100%; height:100%; object-fit:cover; display:block; cursor:zoom-in;}
   .photos .ph .rm{position:absolute; top:3px; right:3px; width:20px; height:20px; border-radius:50%; background:rgba(0,0,0,.55); color:#fff; border:none; font-size:13px; line-height:20px; cursor:pointer; display:flex; align-items:center; justify-content:center;}
-  .entry-tools{display:flex; gap:14px; margin-top:8px;}
+  .entry-tools{display:flex; gap:14px; margin-top:8px; align-items:center;}
+  .entry.private{background:#EFE8DC;}
+  .entry.private .tcol{border-right-color:#C9A15E;}
+  .tlink.priv.on{color:#9A6B1F; font-weight:600;}
+  .priv-tag{font-size:11px; color:#9A6B1F; background:#F3E7CC; border-radius:999px; padding:1px 8px;}
   .tlink{background:none; border:none; color:var(--sub); font:inherit; font-size:12px; cursor:pointer; padding:2px 0; display:inline-flex; align-items:center; gap:4px;}
   .tlink:hover{color:var(--accent);}
   .tlink.del:hover{color:var(--danger);}
@@ -215,7 +219,7 @@ function compressImage(file, maxDim=1200, quality=0.72){
 /* ==========================================================================
    DATA LAYER (Supabase)
    ========================================================================== */
-function rowToEntry(r){ return {id:r.id, time:r.entry_time||"", text:r.body||"", photos:Array.isArray(r.photos)?r.photos:[], seq:r.seq||0}; }
+function rowToEntry(r){ return {id:r.id, time:r.entry_time||"", text:r.body||"", photos:Array.isArray(r.photos)?r.photos:[], seq:r.seq||0, private:!!r.private}; }
 
 async function fetchDay(s){
   const {data,error}=await sb.from("journal").select("*").eq("entry_date",s).order("entry_time",{ascending:true}).order("seq",{ascending:true});
@@ -232,12 +236,12 @@ async function fetchDaysInMonth(monthDate){
   return new Set((data||[]).map(r=>r.entry_date));
 }
 async function insertEntry(s,e){
-  const {error}=await sb.from("journal").insert({ id:e.id, entry_date:s, entry_time:e.time, body:e.text, photos:e.photos, seq:e.seq });
+  const {error}=await sb.from("journal").insert({ id:e.id, entry_date:s, entry_time:e.time, body:e.text, photos:e.photos, seq:e.seq, private:!!e.private });
   if(error){ toast("保存に失敗: "+error.message); return false; }
   return true;
 }
 async function updateEntry(e){
-  const {error}=await sb.from("journal").update({ entry_time:e.time, body:e.text, photos:e.photos }).eq("id",e.id);
+  const {error}=await sb.from("journal").update({ entry_time:e.time, body:e.text, photos:e.photos, private:!!e.private }).eq("id",e.id);
   if(error){ toast("保存に失敗: "+error.message); return false; }
   return true;
 }
@@ -264,7 +268,7 @@ function renderLogin(mode){
   elTop.style.display="none";
   const isSignup = mode==="signup";
   elMain.innerHTML=`<div class="auth-wrap">
-    <h1>Running Lab note</h1>
+    <h1>Lab note</h1>
     <p class="lead">${isSignup?"最初に一度だけアカウントを作る。":"ログインすると、どの端末でも同じ中身が出る。"}</p>
     <div class="field"><label>メールアドレス</label><input id="email" type="email" autocomplete="username" inputmode="email"></div>
     <div class="field"><label>パスワード</label>
@@ -325,7 +329,7 @@ async function showCalendar(){
 }
 function renderCalendar(){
   const y=state.month.getFullYear(), m=state.month.getMonth();
-  elTop.innerHTML=`<span class="title">Running Lab note</span><span class="spacer"></span>
+  elTop.innerHTML=`<span class="title">Lab note</span><span class="spacer"></span>
     <button class="iconbtn" id="btn-today">今日</button>
     <button class="iconbtn plain" id="btn-out">ログアウト</button>`;
   elTop.querySelector("#btn-today").onclick=()=>openDay(todayStr());
@@ -398,13 +402,18 @@ function renderDay(){
   bindEntries(); autosizeAll();
 }
 function renderEntry(e){
-  return `<div class="entry" data-id="${e.id}">
+  return `<div class="entry${e.private?' private':''}" data-id="${e.id}">
     <div class="tcol"><input class="tinput" type="time" value="${esc(e.time)}" step="60" aria-label="時刻"></div>
     <div class="ccol">
       <textarea placeholder="内容を記入…" rows="1">${esc(e.text)}</textarea>
       <div class="photos">${(e.photos||[]).map((src,idx)=>`
         <div class="ph"><img alt="添付" src="${src}" data-idx="${idx}"><button class="rm" data-rm="${idx}" aria-label="写真を削除">×</button></div>`).join("")}</div>
-      <div class="entry-tools"><button class="tlink add-photo">＋ 写真</button><button class="tlink del">削除</button></div>
+      <div class="entry-tools">
+        <button class="tlink add-photo">＋ 写真</button>
+        <button class="tlink priv${e.private?' on':''}">${e.private?'公開に戻す':'プライベートにする'}</button>
+        <button class="tlink del">削除</button>
+        ${e.private?'<span class="priv-tag">コピー除外</span>':''}
+      </div>
     </div></div>`;
 }
 function findEntry(id){ return state.dayData.entries.find(x=>x.id===id); }
@@ -418,6 +427,7 @@ function bindEntries(){
     const ti=row.querySelector(".tinput");
     ti.addEventListener("change",async ()=>{ e.time=ti.value||e.time; await updateEntry(e); });
     row.querySelector(".add-photo").onclick=()=>pickPhotos(e);
+    row.querySelector(".priv").onclick=async ()=>{ e.private=!e.private; if(await updateEntry(e)) renderDay(); };
     row.querySelector(".del").onclick=()=>deleteEntry(e);
     row.querySelectorAll("[data-rm]").forEach(btn=>{ btn.onclick=ev=>{ ev.stopPropagation(); removePhoto(e, +btn.getAttribute("data-rm")); }; });
     row.querySelectorAll("img[data-idx]").forEach(img=>{ img.onclick=()=>{ if(img.src) openLightbox(img.src); }; });
@@ -427,7 +437,7 @@ function autosize(ta){ ta.style.height="auto"; ta.style.height=ta.scrollHeight+"
 function autosizeAll(){ elMain.querySelectorAll("textarea").forEach(autosize); }
 
 async function addEntry(){
-  const e={ id:uid(), time:nowHM(), text:"", photos:[], seq:Date.now() };
+  const e={ id:uid(), time:nowHM(), text:"", photos:[], seq:Date.now(), private:false };
   const ok=await insertEntry(state.day,e);
   if(!ok) return;
   state.dayData.entries.push(e);
@@ -464,11 +474,15 @@ lb.onclick=()=>{ lb.classList.remove("on"); lbImg.src=""; };
 
 /* ---------- copy day ---------- */
 async function copyDay(){
-  const entries=state.dayData.entries.slice().sort(sortEntries);
-  const lines=[dateHeader(state.day),""];
-  for(const e of entries){ const ph=(e.photos&&e.photos.length)?`  [写真${e.photos.length}]`:""; lines.push(`${e.time}\t${(e.text||"").replace(/\n/g,"\n\t")}${ph}`); }
-  const text=lines.join("\n");
-  try{ await navigator.clipboard.writeText(text); flashCopy("コピーした"); }
+  const entries=state.dayData.entries.slice().sort(sortEntries).filter(e=>!e.private);
+  const blocks=entries.map(e=>{
+    const t=(e.text||"").replace(/[\s\u3000]+$/,"");   // drop trailing blanks
+    let block=(e.time?e.time+"  ":"")+t;               // time + 2 spaces; continuation lines stay flush-left
+    if(e.photos&&e.photos.length) block+=(block?"\n":"")+`[写真${e.photos.length}]`;
+    return block;
+  }).filter(b=>b.length);
+  const text=[dateHeader(state.day),"",blocks.join("\n\n")].join("\n").replace(/\n{3,}/g,"\n\n").trim();
+  try{ await navigator.clipboard.writeText(text); flashCopy(entries.length? "コピーした":"公開行なし"); }
   catch(_){ const ta=document.createElement("textarea"); ta.value=text; document.body.appendChild(ta); ta.select();
     try{ document.execCommand("copy"); flashCopy("コピーした"); }catch(__){ toast("コピーできなかった"); } ta.remove(); }
 }
