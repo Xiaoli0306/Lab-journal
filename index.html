@@ -410,7 +410,7 @@ function renderEntry(e){
         <div class="ph"><img alt="添付" src="${src}" data-idx="${idx}"><button class="rm" data-rm="${idx}" aria-label="写真を削除">×</button></div>`).join("")}</div>
       <div class="entry-tools">
         <button class="tlink add-photo">＋ 写真</button>
-        <button class="tlink priv${e.private?' on':''}">${e.private?'公開に戻す':'プライベートにする'}</button>
+        <button class="tlink priv${e.private?' on':''}">${e.private?'元に戻す':'プライベートにする'}</button>
         <button class="tlink del">削除</button>
         ${e.private?'<span class="priv-tag">コピー除外</span>':''}
       </div>
