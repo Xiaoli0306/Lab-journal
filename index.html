@@ -127,6 +127,33 @@
   .setup h1{font-family:var(--mincho); font-size:22px;}
   .setup code{background:#EEF1F4; padding:1px 6px; border-radius:4px; font-family:var(--mono); font-size:12.5px; word-break:break-all;}
 
+  /* ---- print / PDF export (5mm方眼・ボタン無し) ---- */
+  #printsheet{ display:none; }
+  @media print {
+    @page{ size:A4; margin:12mm; }
+    html,body{ background:#fff !important; }
+    #app,.lightbox,.toast,.modal-ov{ display:none !important; }
+    #printsheet{
+      display:block !important; color:#23282E; font-family:var(--sans);
+      -webkit-print-color-adjust:exact; print-color-adjust:exact;
+    }
+    #printsheet .ps-date{ font-family:var(--mincho); font-size:15pt; font-weight:600; margin:0 0 5mm; padding-bottom:2.5mm; border-bottom:.3mm solid #888; }
+    #printsheet .ps-log{
+      background-image:
+        linear-gradient(#cad6e6 .12mm, transparent .12mm),
+        linear-gradient(90deg,#cad6e6 .12mm, transparent .12mm);
+      background-size:5mm 5mm;
+      -webkit-print-color-adjust:exact; print-color-adjust:exact;
+    }
+    #printsheet .ps-entry{ display:flex; break-inside:avoid; page-break-inside:avoid; padding:.5mm 0; }
+    #printsheet .ps-time{ flex:0 0 15mm; font-family:var(--mono); font-weight:600; color:#2E5E8C; font-size:10pt; padding:1.2mm 2mm 0 0; border-right:.4mm solid #e0a9a0; text-align:right; }
+    #printsheet .ps-body{ flex:1; min-width:0; padding:.8mm 0 0 3mm; }
+    #printsheet .ps-text{ white-space:pre-wrap; word-break:break-word; font-size:10.5pt; line-height:5mm; }
+    #printsheet .ps-photos{ display:flex; flex-wrap:wrap; gap:2mm; margin:2mm 0; }
+    #printsheet .ps-photos img{ max-width:42mm; max-height:42mm; border:.2mm solid #ccc; border-radius:1mm; }
+    #printsheet .ps-empty{ color:#888; padding:6mm 0; }
+  }
+
   @media (prefers-reduced-motion: reduce){*{transition:none !important;}}
 </style>
 </head>
@@ -373,10 +400,12 @@ function sortEntries(a,b){ if(a.time!==b.time) return (a.time||"").localeCompare
 
 function renderDay(){
   state.view="day";
-  elTop.innerHTML=`<button class="iconbtn plain" id="back">‹ カレンダー</button><span class="spacer"></span>
+  elTop.innerHTML=`<button class="iconbtn plain" id="back" aria-label="カレンダーに戻る">‹</button><span class="spacer"></span>
     <span class="date-h">${dateHeader(state.day)}</span><span class="spacer"></span>
+    <button class="iconbtn" id="pdf">PDF</button>
     <button class="iconbtn" id="copy">コピー</button>`;
   elTop.querySelector("#back").onclick=()=>showCalendar();
+  elTop.querySelector("#pdf").onclick=printDay;
   elTop.querySelector("#copy").onclick=copyDay;
 
   const entries=state.dayData.entries.slice().sort(sortEntries);
@@ -487,6 +516,29 @@ async function copyDay(){
     try{ document.execCommand("copy"); flashCopy("コピーした"); }catch(__){ toast("コピーできなかった"); } ta.remove(); }
 }
 function flashCopy(msg){ const b=elTop.querySelector("#copy"); if(!b) return; const old=b.textContent; b.textContent=msg; setTimeout(()=>{ b.textContent=old; },1200); }
+
+/* ---------- print / PDF (private除外・ボタン無し・5mm方眼) ---------- */
+function printDay(){
+  const entries=state.dayData.entries.slice().sort(sortEntries).filter(e=>!e.private);
+  const rows=entries.map(e=>{
+    const text=(e.text||"").replace(/[\s\u3000]+$/,"");
+    const photos=(e.photos||[]).map(src=>`<img src="${src}" alt="">`).join("");
+    return `<div class="ps-entry">
+      <div class="ps-time">${esc(e.time||"")}</div>
+      <div class="ps-body">${text?`<div class="ps-text">${esc(text)}</div>`:""}${photos?`<div class="ps-photos">${photos}</div>`:""}</div>
+    </div>`;
+  }).join("");
+  const prev=document.getElementById("printsheet"); if(prev) prev.remove();
+  const sheet=document.createElement("div");
+  sheet.id="printsheet";
+  sheet.innerHTML=`<div class="ps-date">${dateHeader(state.day)}</div>
+    <div class="ps-log">${rows||'<div class="ps-empty">公開できる記入がありません。</div>'}</div>`;
+  document.body.appendChild(sheet);
+  const cleanup=()=>{ const s=document.getElementById("printsheet"); if(s) s.remove(); window.removeEventListener("afterprint",cleanup); };
+  window.addEventListener("afterprint",cleanup);
+  setTimeout(()=>{ try{ window.print(); }catch(_){ toast("この画面では印刷できない。SafariかPCで開いて。"); cleanup(); } }, 60);
+  setTimeout(cleanup, 60000);
+}
 
 /* ==========================================================================
    ROUTER / INIT
