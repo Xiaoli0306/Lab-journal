@@ -367,10 +367,18 @@ function renderDay(){
   }else{
     body=`<div class="log">${entries.map(renderEntry).join("")}</div>`;
   }
-  elMain.innerHTML=`<div class="day-wrap"><div class="day-sub">${state.day} · ${entries.length}件</div>${body}</div>
+  elMain.innerHTML=`<div class="day-wrap">
+    <div style="display:flex;gap:10px;justify-content:space-between;padding:10px 16px 2px;">
+      <button class="iconbtn" id="prevday">‹ 前の日</button>
+      <button class="iconbtn" id="nextday">次の日 ›</button>
+    </div>
+    <div class="day-sub">${state.day} · ${entries.length}件</div>${body}</div>
     <div class="addbar"><div class="inner"><button class="addbtn" id="add">＋ 記入</button></div></div>`;
   elMain.querySelector("#add").onclick=addEntry;
-  bindEntries(); autosizeAll();
+  const shiftDay=(delta)=>{ const d=parseYMD(state.day); d.setDate(d.getDate()+delta); openDay(ymd(d)); };
+  elMain.querySelector("#prevday").onclick=()=>shiftDay(-1);
+  elMain.querySelector("#nextday").onclick=()=>shiftDay(1);
+  bindEntries(); autosizeAll();</parameter>
 }
 function renderEntry(e){
   return `<div class="entry" data-id="${e.id}">
