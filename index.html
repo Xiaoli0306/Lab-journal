@@ -378,7 +378,7 @@ function renderDay(){
   const shiftDay=(delta)=>{ const d=parseYMD(state.day); d.setDate(d.getDate()+delta); openDay(ymd(d)); };
   elMain.querySelector("#prevday").onclick=()=>shiftDay(-1);
   elMain.querySelector("#nextday").onclick=()=>shiftDay(1);
-  bindEntries(); autosizeAll();</parameter>
+  bindEntries(); autosizeAll();
 }
 function renderEntry(e){
   return `<div class="entry" data-id="${e.id}">
