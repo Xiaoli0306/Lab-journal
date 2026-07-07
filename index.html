@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Life Log</title>
+<title>Running Lab note</title>
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/png" href="favicon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -264,7 +264,7 @@ function renderLogin(mode){
   elTop.style.display="none";
   const isSignup = mode==="signup";
   elMain.innerHTML=`<div class="auth-wrap">
-    <h1>Running Log</h1>
+    <h1>Running Lab note</h1>
     <p class="lead">${isSignup?"最初に一度だけアカウントを作る。":"ログインすると、どの端末でも同じ中身が出る。"}</p>
     <div class="field"><label>メールアドレス</label><input id="email" type="email" autocomplete="username" inputmode="email"></div>
     <div class="field"><label>パスワード</label>
@@ -325,7 +325,7 @@ async function showCalendar(){
 }
 function renderCalendar(){
   const y=state.month.getFullYear(), m=state.month.getMonth();
-  elTop.innerHTML=`<span class="title">Running Log</span><span class="spacer"></span>
+  elTop.innerHTML=`<span class="title">Running Lab note</span><span class="spacer"></span>
     <button class="iconbtn" id="btn-today">今日</button>
     <button class="iconbtn plain" id="btn-out">ログアウト</button>`;
   elTop.querySelector("#btn-today").onclick=()=>openDay(todayStr());
