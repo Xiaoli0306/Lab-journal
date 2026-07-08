@@ -71,10 +71,12 @@
   .entry .etext{width:100%; font-family:var(--sans); font-size:15px; color:var(--ink); line-height:1.7; padding:4px 0; white-space:pre-wrap; word-break:break-word; cursor:text; min-height:1.6em;}
   .entry .etext.empty{color:#B7BEC6;}
   .entry .etext a{color:var(--accent); text-decoration:underline; word-break:break-all;}
-  .photos{display:flex; flex-wrap:wrap; gap:8px; margin-top:6px;}
-  .photos .ph{position:relative; width:96px; height:96px; border-radius:8px; overflow:hidden; border:1px solid var(--line); background:#f0f0ee;}
-  .photos .ph img{width:100%; height:100%; object-fit:cover; display:block; cursor:zoom-in;}
-  .photos .ph .rm{position:absolute; top:3px; right:3px; width:20px; height:20px; border-radius:50%; background:rgba(0,0,0,.55); color:#fff; border:none; font-size:13px; line-height:20px; cursor:pointer; display:flex; align-items:center; justify-content:center;}
+  .photos{display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; align-items:flex-start;}
+  .photos .ph{position:relative; display:inline-block; max-width:100%; border-radius:8px; overflow:hidden; border:1px solid var(--line); background:#f0f0ee; vertical-align:top;}
+  .photos .ph img{width:100%; height:auto; display:block; cursor:zoom-in;}
+  .photos .ph .rm{position:absolute; top:3px; right:3px; width:20px; height:20px; border-radius:50%; background:rgba(0,0,0,.55); color:#fff; border:none; font-size:13px; line-height:20px; cursor:pointer; display:flex; align-items:center; justify-content:center; z-index:2;}
+  .photos .ph .ph-resize{position:absolute; right:0; bottom:0; width:22px; height:22px; cursor:nwse-resize; touch-action:none; background:rgba(46,94,140,.8); border-top-left-radius:8px; z-index:2;}
+  .photos .ph .ph-resize::before{content:""; position:absolute; right:5px; bottom:5px; width:7px; height:7px; border-right:2px solid #fff; border-bottom:2px solid #fff;}
   .entry-tools{display:flex; gap:14px; margin-top:8px; align-items:center;}
   .entry.private{background:#EFE8DC;}
   .entry.private .tcol{border-right-color:#C9A15E;}
@@ -153,7 +155,7 @@
     #printsheet .ps-body{ flex:1; min-width:0; padding:.8mm 0 0 3mm; }
     #printsheet .ps-text{ white-space:pre-wrap; word-break:break-word; font-size:10.5pt; line-height:5mm; }
     #printsheet .ps-photos{ display:flex; flex-wrap:wrap; gap:2mm; margin:2mm 0; }
-    #printsheet .ps-photos img{ max-width:42mm; max-height:42mm; border:.2mm solid #ccc; border-radius:1mm; }
+    #printsheet .ps-photos img{ height:auto; max-width:100%; border:.2mm solid #ccc; border-radius:1mm; }
     #printsheet .ps-empty{ color:#888; padding:6mm 0; }
   }
 
@@ -249,7 +251,7 @@ function compressImage(file, maxDim=1200, quality=0.72){
 /* ==========================================================================
    DATA LAYER (Supabase)
    ========================================================================== */
-function rowToEntry(r){ return {id:r.id, time:r.entry_time||"", text:r.body||"", photos:Array.isArray(r.photos)?r.photos:[], seq:r.seq||0, private:!!r.private}; }
+function rowToEntry(r){ const photos=(Array.isArray(r.photos)?r.photos:[]).map(p=> (typeof p==="string")?{src:p}:(p&&p.src?{src:p.src,w:p.w}:null)).filter(Boolean); return {id:r.id, time:r.entry_time||"", text:r.body||"", photos, seq:r.seq||0, private:!!r.private}; }
 
 async function fetchDay(s){
   const {data,error}=await sb.from("journal").select("*").eq("entry_date",s).order("entry_time",{ascending:true}).order("seq",{ascending:true});
@@ -438,8 +440,8 @@ function renderEntry(e){
     <div class="tcol"><input class="tinput" type="time" value="${esc(e.time)}" step="60" aria-label="時刻"></div>
     <div class="ccol">
       <div class="etext${e.text?'':' empty'}">${e.text?linkify(e.text):'内容を記入…'}</div>
-      <div class="photos">${(e.photos||[]).map((src,idx)=>`
-        <div class="ph"><img alt="添付" src="${src}" data-idx="${idx}"><button class="rm" data-rm="${idx}" aria-label="写真を削除">×</button></div>`).join("")}</div>
+      <div class="photos">${(e.photos||[]).map((p,idx)=>`
+        <div class="ph" data-idx="${idx}" style="width:${(p&&p.w)?p.w:120}px"><img alt="添付" src="${p.src}" data-idx="${idx}"><button class="rm" data-rm="${idx}" aria-label="写真を削除">×</button><span class="ph-resize" aria-hidden="true"></span></div>`).join("")}</div>
       <div class="entry-tools">
         <button class="tlink add-photo">＋ 写真</button>
         <button class="tlink priv${e.private?' on':''}">${e.private?'元に戻す':'プライベートにする'}</button>
@@ -462,6 +464,7 @@ function bindEntries(){
     row.querySelector(".del").onclick=()=>deleteEntry(e);
     row.querySelectorAll("[data-rm]").forEach(btn=>{ btn.onclick=ev=>{ ev.stopPropagation(); removePhoto(e, +btn.getAttribute("data-rm")); }; });
     row.querySelectorAll("img[data-idx]").forEach(img=>{ img.onclick=()=>{ if(img.src) openLightbox(img.src); }; });
+    row.querySelectorAll(".ph-resize").forEach(h=>{ h.addEventListener("pointerdown", ev=>startPhotoResize(ev, h, e)); });
   });
 }
 function autosize(ta){ ta.style.height="auto"; ta.style.height=ta.scrollHeight+"px"; }
@@ -518,12 +521,32 @@ function pickPhotos(e){
   const inp=document.createElement("input"); inp.type="file"; inp.accept="image/*"; inp.multiple=true;
   inp.onchange=async ()=>{
     for(const f of [...inp.files]){
-      try{ const data=await compressImage(f); e.photos=e.photos||[]; e.photos.push(data); }
+      try{ const data=await compressImage(f); e.photos=e.photos||[]; e.photos.push({src:data}); }
       catch(err){ toast("画像を読み込めなかった"); }
     }
     if(await updateEntry(e)) renderDay();
   };
   inp.click();
+}
+function startPhotoResize(ev, handle, e){
+  ev.preventDefault(); ev.stopPropagation();
+  const ph=handle.closest(".ph"); if(!ph) return;
+  const idx=+ph.getAttribute("data-idx");
+  const MIN=60, MAX=640;
+  const startX=ev.clientX, startW=ph.offsetWidth;
+  try{ handle.setPointerCapture(ev.pointerId); }catch(_){}
+  const move=me=>{ let w=Math.round(startW+(me.clientX-startX)); w=Math.max(MIN,Math.min(MAX,w)); ph.style.width=w+"px"; };
+  const up=async ()=>{
+    handle.removeEventListener("pointermove",move);
+    handle.removeEventListener("pointerup",up);
+    handle.removeEventListener("pointercancel",up);
+    const w=Math.max(MIN,Math.min(MAX,ph.offsetWidth));
+    if(e.photos[idx]) e.photos[idx].w=w;
+    await updateEntry(e);
+  };
+  handle.addEventListener("pointermove",move);
+  handle.addEventListener("pointerup",up);
+  handle.addEventListener("pointercancel",up);
 }
 async function removePhoto(e, idx){
   e.photos=(e.photos||[]).filter((_,i)=>i!==idx);
@@ -556,7 +579,7 @@ function printDay(){
   const entries=state.dayData.entries.slice().sort(sortEntries).filter(e=>!e.private);
   const rows=entries.map(e=>{
     const text=(e.text||"").replace(/[\s\u3000]+$/,"");
-    const photos=(e.photos||[]).map(src=>`<img src="${src}" alt="">`).join("");
+    const photos=(e.photos||[]).map(p=>`<img src="${p.src}" alt="" style="width:${(p&&p.w)?p.w:120}px">`).join("");
     return `<div class="ps-entry">
       <div class="ps-time">${esc(e.time||"")}</div>
       <div class="ps-body">${text?`<div class="ps-text">${esc(text)}</div>`:""}${photos?`<div class="ps-photos">${photos}</div>`:""}</div>
