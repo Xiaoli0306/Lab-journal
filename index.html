@@ -19,11 +19,12 @@
     --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
-  html,body{margin:0; height:100%;}
+  html,body{margin:0; height:100%; overflow:hidden;}
   body{font-family:var(--sans); color:var(--ink); background:var(--paper); line-height:1.6; -webkit-font-smoothing:antialiased;}
-  #app{max-width:720px; margin:0 auto; min-height:100%; display:flex; flex-direction:column;}
+  #app{position:fixed; inset:0; max-width:720px; margin:0 auto; display:flex; flex-direction:column; background:var(--paper);}
+  #main{flex:1 1 auto; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch;}
 
-  .topbar{position:sticky; top:0; z-index:20; display:flex; align-items:center; gap:10px;
+  .topbar{flex:0 0 auto; z-index:20; display:flex; align-items:center; gap:10px;
     padding:14px 16px 12px; background:rgba(251,250,247,.92); backdrop-filter:saturate(1.1) blur(6px); border-bottom:1px solid var(--line);}
   .topbar .title{font-weight:600; letter-spacing:.02em;}
   .topbar .date-h{font-family:var(--mincho); font-size:20px; font-weight:600;}
@@ -88,8 +89,8 @@
   .empty-state{padding:52px 24px; text-align:center; color:var(--sub);}
   .empty-state .big{font-family:var(--mincho); font-size:17px; color:var(--ink); margin-bottom:6px;}
 
-  .addbar{position:fixed; left:0; right:0; bottom:0; z-index:30; display:flex; justify-content:center;
-    padding:14px 16px calc(16px + env(safe-area-inset-bottom)); background:linear-gradient(transparent, var(--paper) 34%); pointer-events:none;}
+  .addbar{flex:0 0 auto; z-index:30; display:flex; justify-content:center;
+    padding:12px 16px calc(12px + env(safe-area-inset-bottom)); background:var(--paper); border-top:1px solid var(--line); pointer-events:none;}
   .addbar .inner{max-width:720px; width:100%; display:flex; justify-content:flex-end; pointer-events:auto;}
   .addbtn{appearance:none; border:none; cursor:pointer; font:inherit; font-weight:600; font-size:15px; background:var(--accent); color:#fff;
     padding:14px 24px; border-radius:999px; box-shadow:0 6px 18px rgba(46,94,140,.28); display:inline-flex; align-items:center; gap:8px; transition:transform .12s;}
@@ -166,6 +167,7 @@
 <div id="app">
   <div class="topbar" id="topbar" style="display:none"></div>
   <div id="main"></div>
+  <div class="addbar" id="addbar" style="display:none"><div class="inner"><button class="addbtn" id="addbtn">＋ 記入</button></div></div>
 </div>
 
 <div class="lightbox" id="lightbox"><img id="lightbox-img" alt=""></div>
@@ -184,6 +186,8 @@ const SUPABASE_ANON_KEY = "sb_publishable_XLf55jWXRpsydkVqzEfYXw_VJrnPfAF";
 const DOW = ["日","月","火","水","木","金","土"];
 const elTop = document.getElementById("topbar");
 const elMain = document.getElementById("main");
+const elAddbar = document.getElementById("addbar");
+document.getElementById("addbtn").onclick = ()=>addEntry();
 
 const configured = !SUPABASE_URL.includes("YOUR-PROJECT") && !SUPABASE_ANON_KEY.includes("YOUR-ANON");
 let sb = null;
@@ -287,7 +291,7 @@ async function deleteRow(id){
    AUTH
    ========================================================================== */
 function renderSetup(){
-  elTop.style.display="none";
+  elTop.style.display="none"; elAddbar.style.display="none";
   elMain.innerHTML=`<div class="setup">
     <h1>設定がまだ</h1>
     <p>このファイルの先頭にある <code>SUPABASE_URL</code> と <code>SUPABASE_ANON_KEY</code> を、あなたのプロジェクトの値に置き換えて保存してから開き直して。</p>
@@ -297,7 +301,7 @@ function renderSetup(){
 
 function renderLogin(mode){
   state.view="login"; mode=mode||"login";
-  elTop.style.display="none";
+  elTop.style.display="none"; elAddbar.style.display="none";
   const isSignup = mode==="signup";
   elMain.innerHTML=`<div class="auth-wrap">
     <h1>Lab note</h1>
@@ -355,9 +359,10 @@ function translateAuthError(m){
    ========================================================================== */
 async function showCalendar(){
   state.view="calendar";
-  elTop.style.display="";
+  elTop.style.display=""; elAddbar.style.display="none";
   state.entryDays=await fetchDaysInMonth(state.month);
   renderCalendar();
+  elMain.scrollTop=0;
 }
 function renderCalendar(){
   const y=state.month.getFullYear(), m=state.month.getMonth();
@@ -398,7 +403,9 @@ async function openDay(s){
   state.day=s; state.month=startOfMonth(parseYMD(s));
   elTop.style.display="";
   state.dayData=await fetchDay(s);
+  elMain.scrollTop=0;
   renderDay();
+  elMain.scrollTop=0;
 }
 function dateHeader(s){ const d=parseYMD(s); return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日(${DOW[d.getDay()]})`; }
 function sortEntries(a,b){ if(a.time!==b.time) return (a.time||"").localeCompare(b.time||""); return (a.seq||0)-(b.seq||0); }
@@ -420,20 +427,21 @@ function renderDay(){
   }else{
     body=`<div class="log">${entries.map(renderEntry).join("")}</div>`;
   }
+  const sc=elMain.scrollTop;
   elMain.innerHTML=`<div class="day-wrap">
     <div style="display:flex;gap:8px;justify-content:space-between;padding:10px 16px 2px;">
       <button class="iconbtn" id="prevday">‹ 前の日</button>
       <button class="iconbtn" id="gotoday">今日</button>
       <button class="iconbtn" id="nextday">次の日 ›</button>
     </div>
-    <div class="day-sub">${state.day} · ${entries.length}件</div>${body}</div>
-    <div class="addbar"><div class="inner"><button class="addbtn" id="add">＋ 記入</button></div></div>`;
-  elMain.querySelector("#add").onclick=addEntry;
+    <div class="day-sub">${state.day} · ${entries.length}件</div>${body}</div>`;
+  elAddbar.style.display="";
   const shiftDay=(delta)=>{ const d=parseYMD(state.day); d.setDate(d.getDate()+delta); openDay(ymd(d)); };
   elMain.querySelector("#prevday").onclick=()=>shiftDay(-1);
   elMain.querySelector("#gotoday").onclick=()=>openDay(todayStr());
   elMain.querySelector("#nextday").onclick=()=>shiftDay(1);
   bindEntries(); autosizeAll();
+  elMain.scrollTop=sc;
 }
 function renderEntry(e){
   return `<div class="entry${e.private?' private':''}" data-id="${e.id}">
@@ -467,7 +475,7 @@ function bindEntries(){
     row.querySelectorAll(".ph-resize").forEach(h=>{ h.addEventListener("pointerdown", ev=>startPhotoResize(ev, h, e)); });
   });
 }
-function autosize(ta){ ta.style.height="auto"; ta.style.height=ta.scrollHeight+"px"; }
+function autosize(ta){ const sc=elMain?elMain.scrollTop:0; ta.style.height="auto"; ta.style.height=ta.scrollHeight+"px"; if(elMain) elMain.scrollTop=sc; }
 function autosizeAll(){ elMain.querySelectorAll("textarea").forEach(autosize); }
 
 /* ---------- text view: URLをリンク化 / タップで編集 ---------- */
